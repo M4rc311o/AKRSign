@@ -14,7 +14,7 @@ class CertificateAuthority:
     def __new__(cls):
         if not hasattr(cls, 'instance'):
             cls.instance = super(CertificateAuthority, cls).__new__(cls)
-            return cls.instance
+        return cls.instance
 
     def __init__(self):
         self.ca_name = x509.Name([
