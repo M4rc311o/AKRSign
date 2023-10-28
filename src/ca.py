@@ -3,24 +3,27 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
-import os
 import datetime
+import warnings
+import os
 
 class CertificateAuthorityError(Exception):
     pass
 
 # make class singleton
 class CertificateAuthority:
+    __instance = None
     def __new__(cls):
-        if not hasattr(cls, 'instance'):
-            cls.instance = super(CertificateAuthority, cls).__new__(cls)
-        return cls.instance
+        if cls.__instance is None:
+            cls.__instance = super(CertificateAuthority, cls).__new__(cls)
+        return cls.__instance
 
     def __init__(self):
         self.ca_name = x509.Name([
             x509.NameAttribute(NameOID.COMMON_NAME, "BPC-AKR Certification Authority"),
             x509.NameAttribute(NameOID.COUNTRY_NAME, "CZ"),
             x509.NameAttribute(NameOID.LOCALITY_NAME, "Brno"),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Czechia"),
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, "BPC-AKR")
         ])
         self.year_validity = 5
@@ -37,6 +40,8 @@ class CertificateAuthority:
                     )
             except OSError as e:
                 raise CertificateAuthorityError("Error with loading CA private key file: " + str(e))
+            if not os.path.isfile(self.ca_public_cert_path):
+                warnings.warn("CA public certificate file is missing from CA_keystore")
         else:
             self.ca_gen_key_cert()
 
@@ -110,7 +115,7 @@ class CertificateAuthority:
         except OSError as e:
             raise CertificateAuthorityError("Error with saving CA public certificate file: " + str(e))
 
-    def handle_CSR(self, serialized_csr):
+    def handle_csr(self, serialized_csr):
         csr = x509.load_pem_x509_csr(serialized_csr)                    # deserialize csr
 
         # check Certificate Signing Request Validity
