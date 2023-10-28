@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives import serialization
 import sys
 import ca
 
-def request_certificate(private_key, public_key, common_name, country_name, locality_name, state_or_province_name, organization_name):
+def request_certificate(private_key, common_name, country_name, locality_name, state_or_province_name, organization_name):
     akr_ca = ca.CertificateAuthority()
     csr_builder = x509.CertificateSigningRequestBuilder()
     csr_builder = csr_builder.subject_name(x509.Name([
@@ -16,6 +16,7 @@ def request_certificate(private_key, public_key, common_name, country_name, loca
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization_name)
     ]))
 
+    csr_builder = csr_builder
     csr = csr_builder.sign(private_key=private_key, algorithm=hashes.SHA256())
     serial_cert = akr_ca.handle_csr(csr.public_bytes(
         encoding=serialization.Encoding.PEM
