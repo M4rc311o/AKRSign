@@ -16,7 +16,6 @@ def request_certificate(private_key, common_name, country_name, locality_name, s
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization_name)
     ]))
 
-    csr_builder = csr_builder
     csr = csr_builder.sign(private_key=private_key, algorithm=hashes.SHA256())
     serial_cert = akr_ca.handle_csr(csr.public_bytes(
         encoding=serialization.Encoding.PEM
