@@ -1,10 +1,10 @@
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 import datetime
-import warnings
 import os
 
 class CertificateAuthorityError(Exception):
@@ -19,7 +19,7 @@ class CertificateAuthority:
         return cls.__instance
 
     def __init__(self):
-        self.ca_name = x509.Name([
+        self.x509_ca_name = x509.Name([
             x509.NameAttribute(NameOID.COMMON_NAME, "BPC-AKR Certification Authority"),
             x509.NameAttribute(NameOID.COUNTRY_NAME, "CZ"),
             x509.NameAttribute(NameOID.LOCALITY_NAME, "Brno"),
@@ -27,21 +27,20 @@ class CertificateAuthority:
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, "BPC-AKR")
         ])
         self.year_validity = 5
-        self.ca_private_key_path = "CA_keystore/ca_private_key.pem"
+        self.ca_key_and_cert_path = "CA_keystore/ca_key_and_cert.p12"
         self.ca_public_cert_path = "CA_keystore/ca_root_cert.pem"
+        self.issued_cert_dir = "CA_keystore/issued_certificates/"
 
         # load private key
-        if os.path.isfile(self.ca_private_key_path):
+        if os.path.isfile(self.ca_key_and_cert_path):
             try:
-                with open(self.ca_private_key_path, "rb") as key_f:
-                    self.private_key = serialization.load_pem_private_key(
-                        key_f.read(),
+                with open(self.ca_key_and_cert_path, "rb") as key_cert_f:
+                    self.private_key = pkcs12.load_key_and_certificates(
+                        key_cert_f.read(),
                         password=None
                     )
-            except OSError as e:
-                raise CertificateAuthorityError("Error with loading CA private key file: " + str(e))
-            if not os.path.isfile(self.ca_public_cert_path):
-                warnings.warn("CA public certificate file is missing from CA_keystore")
+            except Exception as e:
+                raise CertificateAuthorityError("Error with loading CA private key from CA PKCS #12 file: " + str(e))
         else:
             self.ca_gen_key_cert()
 
@@ -52,33 +51,23 @@ class CertificateAuthority:
             ec.SECP256R1()
         )
 
-        # create certificate builder for self-signed Root CA certificate
-        builder = x509.CertificateBuilder()
-
-        # subject information
-        builder = builder.subject_name(self.ca_name)
-
-        # issure information
-        builder = builder.issuer_name(self.ca_name)
-
-        # validity
-        builder = builder.not_valid_before(datetime.datetime.today() - datetime.timedelta(days=1))  # valid from yesterday
-        builder = builder.not_valid_after(datetime.datetime.today() + datetime.timedelta(days=(365 * 30)))  # valid for 30 years
+        cert_builder = x509.CertificateBuilder()    # create certificate builder for self-signed Root CA certificate
+        cert_builder = cert_builder.subject_name(self.x509_ca_name) # subject information
+        cert_builder = cert_builder.issuer_name(self.x509_ca_name)  # issure information
+        cert_builder = cert_builder.not_valid_before(datetime.datetime.today() - datetime.timedelta(days=1))  # valid from yesterday
+        cert_builder = cert_builder.not_valid_after(datetime.datetime.today() + datetime.timedelta(days=(365 * 30)))  # valid for 30 years
+        cert_builder = cert_builder.public_key(self.private_key.public_key())   # subject public key
 
         # misc
-        builder = builder.serial_number(x509.random_serial_number())
-
-        # subject public key
-        builder = builder.public_key(self.private_key.public_key())
+        cert_builder = cert_builder.serial_number(x509.random_serial_number())
 
         # constrains
-        # CA certificate = True
-        builder = builder.add_extension(
+        cert_builder = cert_builder.add_extension(
             x509.BasicConstraints(ca=True, path_length=None), critical=True
         )
 
         # specify key usages (certificate can be used for signing other certificates and CRLs)
-        builder = builder.add_extension(
+        cert_builder = cert_builder.add_extension(
             x509.KeyUsage(
                 key_cert_sign=True,
                 crl_sign=True,
@@ -93,18 +82,20 @@ class CertificateAuthority:
         )
 
         # self-sign the certificate with CAs private key
-        root_cert = builder.sign(private_key=self.private_key, algorithm=hashes.SHA256())
+        root_cert = cert_builder.sign(private_key=self.private_key, algorithm=hashes.SHA256())
 
-        # save CA private key
+        # save CA PKCS #12 file
         try:
-            with open(self.ca_private_key_path, "wb") as key_f:
-                key_f.write(self.private_key.private_bytes(
-                    encoding=serialization.Encoding.PEM,                # save in .pem file
-                    format=serialization.PrivateFormat.PKCS8,           # save PKCS8 format
-                    encryption_algorithm=serialization.NoEncryption()   # save without encryption
+            with open(self.ca_key_and_cert_path, "wb") as key_cert_f:
+                key_cert_f.write(pkcs12.serialize_key_and_certificates(
+                    name=b"BPC-AKR Certification Authority",
+                    key=self.private_key,
+                    cert=root_cert,
+                    cas=None,
+                    encryption_algorithm=serialization.NoEncryption()
                 ))
-        except OSError as e:
-            raise CertificateAuthorityError("Error with saving CA private key file: " + str(e))
+        except Exception as e:
+            raise CertificateAuthorityError("Error with saving CA PKCS #12 file: " + str(e))
 
         # save CA Root certificate
         try:
@@ -112,7 +103,7 @@ class CertificateAuthority:
                 cert_f.write(root_cert.public_bytes(
                     encoding=serialization.Encoding.PEM                 # save in .pem file
                 ))
-        except OSError as e:
+        except Exception as e:
             raise CertificateAuthorityError("Error with saving CA public certificate file: " + str(e))
 
     def handle_csr(self, serialized_csr):
@@ -124,33 +115,23 @@ class CertificateAuthority:
 
         # HERE should CA also check if provided information are correct
 
-        # create certificate builder for end-entity certificate
-        builder = x509.CertificateBuilder()
-
-        # subject information
-        builder = builder.subject_name(csr.subject)
-
-        # issuer information
-        builder = builder.issuer_name(self.ca_name)
-
-        # validity
-        builder = builder.not_valid_before(datetime.datetime.today() - datetime.timedelta(days=1))  # valid from yesterday
-        builder = builder.not_valid_after(datetime.datetime.today() + datetime.timedelta(days=(365 * self.year_validity)))  # valid for 5 years
+        cert_builder = x509.CertificateBuilder()    # create certificate builder for end-entity certificate
+        cert_builder = cert_builder.subject_name(csr.subject)   # subject information
+        cert_builder = cert_builder.issuer_name(self.x509_ca_name)  # issuer information
+        cert_builder = cert_builder.not_valid_before(datetime.datetime.today() - datetime.timedelta(days=1))  # valid from yesterday
+        cert_builder = cert_builder.not_valid_after(datetime.datetime.today() + datetime.timedelta(days=(365 * self.year_validity)))  # valid for 5 years
+        cert_builder = cert_builder.public_key(csr.public_key())    # subject public key
 
         # misc
-        builder = builder.serial_number(x509.random_serial_number())
-
-        # subject public key
-        builder = builder.public_key(csr.public_key())
+        cert_builder = cert_builder.serial_number(x509.random_serial_number())
 
         # constrains
-        # CA certificate = False
-        builder = builder.add_extension(
-            x509.BasicConstraints(ca=False, path_length=None), critical=True
+        cert_builder = cert_builder.add_extension(
+            x509.BasicConstraints(ca=False, path_length=None), critical=False
         )
 
         # specify key usages (certificate can be used for verifying digital signatures)
-        builder = builder.add_extension(
+        cert_builder = cert_builder.add_extension(
             x509.KeyUsage(
                 digital_signature=True,
                 key_cert_sign=False,
@@ -165,7 +146,16 @@ class CertificateAuthority:
         )
 
         # sign the certificate with CAs private key
-        end_entity_cert = builder.sign(private_key=self.private_key, algorithm=hashes.SHA256())
+        end_entity_cert = cert_builder.sign(private_key=self.private_key, algorithm=hashes.SHA256())
 
-        # return serialized end entity certificate
-        return end_entity_cert.public_bytes(encoding=serialization.Encoding.PEM)
+        serialized_end_entity_cert = end_entity_cert.public_bytes(encoding=serialization.Encoding.PEM)
+
+        # save issued end-entity certificate
+        try:
+            with open(f"{self.issued_cert_dir}{end_entity_cert.serial_number}.pem", "wb") as cert_f:
+                cert_f.write(serialized_end_entity_cert)
+        except Exception as e:
+            raise CertificateAuthorityError("Error with saving issued end-entity certificate file: " + str(e))
+
+        # return serialized end-entity certificate
+        return serialized_end_entity_cert
