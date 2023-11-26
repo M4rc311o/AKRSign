@@ -4,13 +4,13 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
+import warnings
 import datetime
 import os
 
 class CertificateAuthorityError(Exception):
     pass
 
-# make class singleton
 class CertificateAuthority:
     __instance = None
     def __new__(cls):
@@ -27,20 +27,24 @@ class CertificateAuthority:
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, "BPC-AKR")
         ])
         self.year_validity = 5
-        self.ca_key_and_cert_path = "CA_keystore/ca_key_and_cert.p12"
-        self.ca_public_cert_path = "CA_keystore/ca_root_cert.pem"
-        self.issued_cert_dir = "CA_keystore/issued_certificates/"
+        self.ca_key_and_cert_path = "CA_store/ca_key_and_cert.p12"
+        self.ca_public_cert_path = "CA_store/ca_root_cert.pem"
+        self.issued_cert_dir = "CA_store/issued_certificates/"
 
         # load private key
         if os.path.isfile(self.ca_key_and_cert_path):
             try:
                 with open(self.ca_key_and_cert_path, "rb") as key_cert_f:
-                    self.private_key = pkcs12.load_key_and_certificates(
+                    self.private_key, certificate, inter_cert = pkcs12.load_key_and_certificates(
                         key_cert_f.read(),
                         password=None
                     )
             except Exception as e:
-                raise CertificateAuthorityError("Error with loading CA private key from CA PKCS #12 file: " + str(e))
+                raise CertificateAuthorityError("Error with reading CAs PKCS #12 file: " + str(e))
+            if self.private_key is None:
+                raise CertificateAuthorityError("CAs PKCS #12 file does not contain private key or was not loaded properly")
+            if certificate is None:
+                warnings.warn("CAs PKCS #12 file probably does not contain public key certificate")
         else:
             self.ca_gen_key_cert()
 
@@ -88,14 +92,14 @@ class CertificateAuthority:
         try:
             with open(self.ca_key_and_cert_path, "wb") as key_cert_f:
                 key_cert_f.write(pkcs12.serialize_key_and_certificates(
-                    name=b"BPC-AKR Certification Authority",
+                    name=root_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value.encode(),
                     key=self.private_key,
                     cert=root_cert,
                     cas=None,
                     encryption_algorithm=serialization.NoEncryption()
                 ))
         except Exception as e:
-            raise CertificateAuthorityError("Error with saving CA PKCS #12 file: " + str(e))
+            raise CertificateAuthorityError("Error with saving CAs PKCS #12 file: " + str(e))
 
         # save CA Root certificate
         try:
@@ -152,7 +156,7 @@ class CertificateAuthority:
 
         # save issued end-entity certificate
         try:
-            with open(f"{self.issued_cert_dir}{end_entity_cert.serial_number}.pem", "wb") as cert_f:
+            with open(os.path.join(self.issued_cert_dir, f"{end_entity_cert.serial_number}.pem"), "wb") as cert_f:
                 cert_f.write(serialized_end_entity_cert)
         except Exception as e:
             raise CertificateAuthorityError("Error with saving issued end-entity certificate file: " + str(e))
