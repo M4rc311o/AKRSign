@@ -12,6 +12,7 @@ class CertificateAuthorityError(Exception):
     pass
 
 class CertificateAuthority:
+    # create CertificateAuthority class instance as singleton
     __instance = None
     def __new__(cls):
         if cls.__instance is None:
@@ -35,7 +36,7 @@ class CertificateAuthority:
         os.makedirs(self.data_directory, exist_ok=True)
         os.makedirs(os.path.join(self.data_directory, "issued_certificates"), exist_ok=True)
 
-        # load private key
+        # load CA private key
         if os.path.isfile(self.ca_key_and_cert_path):
             try:
                 with open(self.ca_key_and_cert_path, "rb") as key_cert_f:
@@ -48,7 +49,7 @@ class CertificateAuthority:
             if self.private_key is None:
                 raise CertificateAuthorityError("CAs PKCS #12 file does not contain private key or was not loaded properly")
             if certificate is None:
-                warnings.warn("CAs PKCS #12 file probably does not contain public key certificate")
+                warnings.warn("CAs PKCS #12 file does not contain public key certificate")
         else:
             self.ca_gen_key_cert()
 
@@ -114,7 +115,7 @@ class CertificateAuthority:
         except Exception as e:
             raise CertificateAuthorityError("Error with saving CA public certificate file: " + str(e))
 
-    def handle_csr(self, serialized_csr):
+    def handle_csr(self, serialized_csr: bytes) -> bytes:
         csr = x509.load_pem_x509_csr(serialized_csr)                    # deserialize csr
 
         # check Certificate Signing Request Validity

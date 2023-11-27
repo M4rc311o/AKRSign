@@ -13,7 +13,7 @@ import sys
 import os
 import ca
 
-def compute_file_hash(file_path):
+def compute_file_hash(file_path: str) -> bytes:
     # compute file hash
     file_hash = hashes.Hash(hashes.SHA256())
     try:
@@ -25,7 +25,7 @@ def compute_file_hash(file_path):
     file_hash = file_hash.finalize()
     return file_hash
 
-def create_signature(file_path, sig_out_path, private_key_path):
+def create_signature(file_path: str, sig_out_path: str, private_key_path: str) -> bool:
     file_hash = compute_file_hash(file_path)
 
     try:
@@ -65,10 +65,10 @@ def create_signature(file_path, sig_out_path, private_key_path):
         return 1
     return 0
 
-def verify_signature(file_path, signature_path, certificate_path):
+def verify_signature(file_path: str, signature_path: str, certificate_path: str) -> bool:
     pass
 
-def create_certificate(cert_out_path, private_key_out_path, pkcs12_out_path):
+def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out_path: str) -> bool:
     common_name = input("Common name: ")
     country_name = input("Country name: ")
     locality_name = input("Locality name: ")
@@ -135,7 +135,7 @@ def create_certificate(cert_out_path, private_key_out_path, pkcs12_out_path):
     
     return 0
 
-def verify_certificate(certificate_path):
+def verify_certificate(certificate_path: str) -> bool:
     # load end-entity certificate from PEM file
     try:
         with open(certificate_path, "rb") as cert_f:
