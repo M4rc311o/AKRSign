@@ -169,13 +169,13 @@ def verify_certificate(certificate_path: str) -> bool:
     if current_time < ee_certificate.not_valid_before:
         print("End-entity certificate is not valid yet")
         return 1
-    elif current_time > ee_certificate.not_valid_before:
+    elif current_time > ee_certificate.not_valid_after:
         print("End-entity certificate is expired")
         return 1
     if current_time < ca_certificate.not_valid_before:
         print("CA certificate is not valid yet")
         return 1
-    elif current_time > ca_certificate.not_valid_before:
+    elif current_time > ca_certificate.not_valid_after:
         print("CA certificate is expired")
         return 1
     
