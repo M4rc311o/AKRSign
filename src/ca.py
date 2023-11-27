@@ -27,9 +27,13 @@ class CertificateAuthority:
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, "BPC-AKR")
         ])
         self.year_validity = 5
-        self.ca_key_and_cert_path = "CA_store/ca_key_and_cert.p12"
-        self.ca_public_cert_path = "CA_store/ca_root_cert.pem"
-        self.issued_cert_dir = "CA_store/issued_certificates/"
+        self.data_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "AKRSign_data")
+        self.ca_key_and_cert_path = os.path.join(self.data_directory, "ca_key_and_cert.p12")
+        self.ca_public_cert_path = os.path.join("ca_root_cert.pem")
+        self.issued_cert_dir = os.path.join(self.data_directory, "issued_certificates/")
+        
+        os.makedirs(self.data_directory, exist_ok=True)
+        os.makedirs(os.path.join(self.data_directory, "issued_certificates"), exist_ok=True)
 
         # load private key
         if os.path.isfile(self.ca_key_and_cert_path):
