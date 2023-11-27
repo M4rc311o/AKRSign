@@ -181,7 +181,7 @@ def verify_certificate(certificate_path: str) -> bool:
     
     # verify that CA certificate is actually marked as CA
     try:
-        basic_contrains = ca_certificate.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS).value()
+        basic_contrains = ca_certificate.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS).value
         if not basic_contrains.ca:
             print("CA certificate is not marked as CA certificate in basic constrains")
             return 1
@@ -191,7 +191,7 @@ def verify_certificate(certificate_path: str) -> bool:
     
     # verify that CA certificate has key usage to sign other certificates
     try:
-        key_usage = ca_certificate.extensions.get_extension_for_oid(ExtensionOID.KEY_USAGE).value()
+        key_usage = ca_certificate.extensions.get_extension_for_oid(ExtensionOID.KEY_USAGE).value
         if not key_usage.key_cert_sign:
             print("This CA certificate can not be used for signing other certificates")
             return 1
