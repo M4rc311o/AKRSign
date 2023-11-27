@@ -13,8 +13,40 @@ import sys
 import os
 import ca
 
+def compute_file_hash(file_path):
+    # compute file hash
+    file_hash = hashes.Hash(hashes.SHA256())
+    try:
+        with open(file_path, "rb") as file:
+            for byte_block in iter(lambda: file.read(4096), b""):   # read file in 4 KiB chunks
+                file_hash.update(byte_block)
+    except:
+        print("Error with opening file for signing")
+    file_hash = file_hash.finalize()
+    return file_hash
+
 def create_signature(file_path, sig_out_path, private_key_path):
-    pass
+    file_hash = compute_file_hash(file_path)
+
+    try:
+        with open(private_key_path, "rb") as key_f:
+            private_key = serialization.load_pem_private_key(
+                key_f.read(),
+                password=None
+            )
+    except Exception as e:
+        print("Error with loading private key:\n" + str(e))
+        return 1 
+    
+    # PKCS #1 v1.5 padding
+    padding_len = (private_key.key_size / 8) - 3 - len(file_hash)
+    padding = os.urandom(padding_len) #missing filtering zero bytes!!!!
+    encryption_block = b"\x00" + b"\x02" + padding + b"\x00" + file_hash
+
+    # RSA encryption
+    
+
+    return 0
 
 def verify_signature(file_path, signature_path, certificate_path):
     pass
