@@ -25,7 +25,7 @@ def compute_file_hash(file_path: str) -> bytes:
     file_hash = file_hash.finalize()
     return file_hash
 
-def create_signature(file_path: str, sig_out_path: str, private_key_path: str) -> bool:
+def create_signature(file_path: str, sig_out_path: str, private_key_path: str | None) -> bool:
     file_hash = compute_file_hash(file_path)
 
     try:
