@@ -29,7 +29,7 @@ class CertificateAuthority:
         self.year_validity = 5
         self.data_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "AKRSign_data")
         self.ca_key_and_cert_path = os.path.join(self.data_directory, "ca_key_and_cert.p12")
-        self.ca_public_cert_path = os.path.join("ca_root_cert.pem")
+        self.ca_public_cert_path = os.path.join(self.data_directory, "ca_root_cert.pem")
         self.issued_cert_dir = os.path.join(self.data_directory, "issued_certificates/")
         
         os.makedirs(self.data_directory, exist_ok=True)
