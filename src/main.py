@@ -1,11 +1,16 @@
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
+from cryptography.x509 import ExtensionNotFound
+from cryptography.x509.oid import ExtensionOID
 from cryptography.x509.oid import NameOID
 from cryptography import x509
+from datetime import datetime
 import argparse
 import sys
+import os
 import ca
 
 def create_signature(file_path, sig_out_path, private_key_path):
@@ -82,7 +87,70 @@ def create_certificate(cert_out_path, private_key_out_path, pkcs12_out_path):
     return 0
 
 def verify_certificate(certificate_path):
-    pass
+    # load end-entity certificate from PEM file
+    try:
+        with open(certificate_path, "rb") as cert_f:
+            ee_certificate = x509.load_pem_x509_certificate(cert_f.read())
+    except Exception as e:
+        print("Error with loading end-entity certificate:\n" + str(e))
+        return 1
+    
+    # load CA certificate from PEM file
+    try:
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "AKRSign_data/", "ca_root_cert.pem"), "rb") as cert_f:
+            ca_certificate = x509.load_pem_x509_certificate(cert_f.read())
+    except Exception as e:
+        print("Error with loading CA certificate:\n" + str(e))
+        return 1
+
+    # verify that end-entity cert has same issuer as CA cert subject and that signature is correct
+    try:
+        ee_certificate.verify_directly_issued_by(ca_certificate)
+    except ValueError:
+        print("Issuer name on the certificate does not match the subject name of the issuer or the signature algorithm is unsupported.")
+        return 1
+    except TypeError:
+        print("Issuer does not have a supported public key type")
+        return 1
+    except InvalidSignature:
+        return 1
+
+    # verify that both certificates are valid (date)
+    current_time = datetime.utcnow()
+    if current_time < ee_certificate.not_valid_before:
+        print("End-entity certificate is not valid yet")
+        return 1
+    elif current_time > ee_certificate.not_valid_before:
+        print("End-entity certificate is expired")
+        return 1
+    if current_time < ca_certificate.not_valid_before:
+        print("CA certificate is not valid yet")
+        return 1
+    elif current_time > ca_certificate.not_valid_before:
+        print("CA certificate is expired")
+        return 1
+    
+    # verify that CA certificate is actually marked as CA
+    try:
+        basic_contrains = ca_certificate.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS).value()
+        if not basic_contrains.ca:
+            print("CA certificate is not marked as CA certificate in basic constrains")
+            return 1
+    except ExtensionNotFound:
+        print("Basic constrain extension was not found in CA certificate. This extension is necessary for determining if CA certificate is actually CA certificate.")
+        return 1
+    
+    # verify that CA certificate has key usage to sign other certificates
+    try:
+        key_usage = ca_certificate.extensions.get_extension_for_oid(ExtensionOID.KEY_USAGE).value()
+        if not key_usage.key_cert_sign:
+            print("This CA certificate can not be used for signing other certificates")
+            return 1
+    except ExtensionNotFound:
+        print("Key usage extension was not found in CA certificate. This extension is necessary for determining if CA certificate can be used to sign other certificates")
+        return 1
+
+    return 0
 
 def main(args):
     if args.subcommand == "create_signature":
@@ -92,8 +160,11 @@ def main(args):
     elif args.subcommand == "create_certificate":
         create_certificate(args.cert_out, args.private_key_out, args.pkcs12_out)
     elif args.subcommand == "verify_certificate":
-        verify_certificate(args.certificate)
-    
+        if verify_certificate(args.certificate) == 0:
+            print("Signature is valid")
+        else:
+            print("Signature is invalid")
+
     return 0
 
 if __name__ == "__main__":
