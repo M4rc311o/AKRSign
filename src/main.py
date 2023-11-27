@@ -44,8 +44,25 @@ def create_signature(file_path, sig_out_path, private_key_path):
     encryption_block = b"\x00" + b"\x02" + padding + b"\x00" + file_hash
 
     # RSA encryption
-    
+    # convert encryption_block to integer
+    encryption_block_as_int = int.from_bytes(encryption_block, "big", signed=False)
 
+    # Chinese remainder algorithm
+    s1 = pow(encryption_block_as_int, private_key.private_numbers().dmp1, private_key.private_numbers().p)
+    s2 = pow(encryption_block_as_int, private_key.private_numbers().dmq1, private_key.private_numbers().q)
+    h = (private_key.private_numbers().iqmp * (s1 - s2)) % private_key.private_numbers().p
+    file_signature_as_int = (s2 + h * private_key.private_numbers().q) % (private_key.private_numbers().p * private_key.private_numbers().q)
+
+    # convert file_signature_as_int to bytes
+    file_signature = file_signature_as_int.to_bytes((file_signature_as_int.bit_length() + 7) // 8, byteorder='big', signed=False)
+
+    # save file containing signature
+    try:
+        with open(sig_out_path, "wb") as sig_f:
+            sig_f.write(file_signature)
+    except Exception as e:
+        print("Error with saving file containing signature")
+        return 1
     return 0
 
 def verify_signature(file_path, signature_path, certificate_path):
