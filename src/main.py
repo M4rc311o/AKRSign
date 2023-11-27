@@ -39,7 +39,7 @@ def create_signature(file_path: str, sig_out_path: str, private_key_path: str | 
         return 1 
     
     # PKCS #1 v1.5 padding
-    padding_len = (private_key.key_size / 8) - 3 - len(file_hash)
+    padding_len = ((private_key.key_size + 7) // 8) - 3 - len(file_hash)
     padding = os.urandom(padding_len) #missing filtering zero bytes!!!!
     encryption_block = b"\x00" + b"\x02" + padding + b"\x00" + file_hash
 
