@@ -14,7 +14,6 @@ import os
 import ca
 
 def compute_file_hash(file_path: str) -> bytes:
-    # compute file hash
     file_hash = hashes.Hash(hashes.SHA256())
     try:
         with open(file_path, "rb") as file:
@@ -43,34 +42,60 @@ def create_signature(file_path: str, sig_out_path: str, private_key_path: str | 
     padding = os.urandom(padding_len) #missing filtering zero bytes!!!!
     encryption_block = b"\x00" + b"\x02" + padding + b"\x00" + file_hash
 
-    # RSA encryption
+    # RSA signature RFC 8017 
     # convert encryption_block to integer
-    encryption_block_as_int = int.from_bytes(encryption_block, "big", signed=False)
+    encryption_block_as_int = int.from_bytes(encryption_block, byteorder="big", signed=False)
 
     # Chinese remainder algorithm
     s1 = pow(encryption_block_as_int, private_key.private_numbers().dmp1, private_key.private_numbers().p)
     s2 = pow(encryption_block_as_int, private_key.private_numbers().dmq1, private_key.private_numbers().q)
     h = (private_key.private_numbers().iqmp * (s1 - s2)) % private_key.private_numbers().p
-    file_signature_as_int = (s2 + h * private_key.private_numbers().q) % (private_key.private_numbers().p * private_key.private_numbers().q)
+    file_signature_as_int = (s2 + h * private_key.private_numbers().q) % (private_key.public_key().public_numbers().n)
 
     # convert file_signature_as_int to bytes
-    file_signature = file_signature_as_int.to_bytes((file_signature_as_int.bit_length() + 7) // 8, byteorder='big', signed=False)
+    file_signature = file_signature_as_int.to_bytes((file_signature_as_int.bit_length() + 7) // 8, byteorder="big", signed=False)
 
     # save file containing signature
     try:
         with open(sig_out_path, "wb") as sig_f:
             sig_f.write(file_signature)
     except Exception as e:
-        print("Error with saving file containing signature")
+        print("Error with saving file containing signature:\n" + str(e))
         return 1
     return 0
 
 def verify_signature(file_path: str, signature_path: str, certificate_path: str) -> bool:
-    pass
+    file_hash = compute_file_hash(file_path)
+    try:
+        with open(signature_path, "rb") as sig_f:
+            file_signature = sig_f.read()
+    except:
+        print("Error with opening file containing signature")
+        return 1
+
+    try:
+        with open(certificate_path, "rb") as cert_f:
+            public_key = x509.load_pem_x509_certificate(
+                cert_f.read()
+            ).public_key()
+    except Exception as e:
+        print("Error with loading public key certificate:\n" + str(e))
+        return 1
+
+    file_signature_as_int = int.from_bytes(file_signature, byteorder="big", signed=False)
+    decrypted_block_as_int = pow(file_signature_as_int, public_key.public_numbers().e, public_key.public_numbers().n)
+    decrypted_block = decrypted_block_as_int.to_bytes((decrypted_block_as_int.bit_length() + 7) // 8, byteorder="big", signed=False)
+
+    if file_hash != decrypted_block[-(len(file_hash)):]:
+        return 1
+    
+    if create_certificate(certificate_path) != 0:
+        return 1
+    return 0
 
 def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out_path: str) -> bool:
     common_name = input("Common name: ")
-    country_name = input("Country name: ")
+    country_name = input("Country code (cz, ...): ")
     locality_name = input("Locality name: ")
     state_or_province_name = input("State/province name: ")
     organization_name = input("Organization name: ")
@@ -205,14 +230,17 @@ def main(args):
     if args.subcommand == "create_signature":
         create_signature(args.file, args.sig_out, args.private_key)
     elif args.subcommand == "verify_signature":
-        verify_signature(args.file, args.signature, args.certificate)
+        if verify_signature(args.file, args.signature, args.certificate) == 0:
+            print("Signature is valid")
+        else:
+            print("Signature is invalid")
     elif args.subcommand == "create_certificate":
         create_certificate(args.cert_out, args.private_key_out, args.pkcs12_out)
     elif args.subcommand == "verify_certificate":
         if verify_certificate(args.certificate) == 0:
-            print("Signature is valid")
+            print("Certificate is valid")
         else:
-            print("Signature is invalid")
+            print("Certificate is invalid")
 
     return 0
 
