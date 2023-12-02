@@ -24,7 +24,7 @@ def compute_file_hash(file_path: str) -> bytes:
     file_hash = file_hash.finalize()
     return file_hash
 
-def create_signature(file_path: str, sig_out_path: str, private_key_path: str | None) -> bool:
+def create_signature(file_path: str, sig_out_path: str, private_key_path: str) -> bool:
     file_hash = compute_file_hash(file_path)
 
     try:
@@ -35,7 +35,11 @@ def create_signature(file_path: str, sig_out_path: str, private_key_path: str | 
             )
     except Exception as e:
         print("Error with loading private key:\n" + str(e))
-        return 1 
+        return True
+    
+    if not isinstance(private_key, rsa.RSAPrivateKey):
+        print("Unsupported key type")
+        return True
     
     # PKCS #1 v1.5 padding
     padding_len = ((private_key.key_size + 7) // 8) - 3 - len(file_hash)
@@ -61,8 +65,8 @@ def create_signature(file_path: str, sig_out_path: str, private_key_path: str | 
             sig_f.write(file_signature)
     except Exception as e:
         print("Error with saving file containing signature:\n" + str(e))
-        return 1
-    return 0
+        return True
+    return False
 
 def verify_signature(file_path: str, signature_path: str, certificate_path: str) -> bool:
     file_hash = compute_file_hash(file_path)
@@ -71,7 +75,7 @@ def verify_signature(file_path: str, signature_path: str, certificate_path: str)
             file_signature = sig_f.read()
     except:
         print("Error with opening file containing signature")
-        return 1
+        return True
 
     try:
         with open(certificate_path, "rb") as cert_f:
@@ -80,20 +84,24 @@ def verify_signature(file_path: str, signature_path: str, certificate_path: str)
             ).public_key()
     except Exception as e:
         print("Error with loading public key certificate:\n" + str(e))
-        return 1
+        return True
+    
+    if not isinstance(public_key, rsa.RSAPublicKey):
+        print("Unsupported key type")
+        return True
 
     file_signature_as_int = int.from_bytes(file_signature, byteorder="big", signed=False)
     decrypted_block_as_int = pow(file_signature_as_int, public_key.public_numbers().e, public_key.public_numbers().n)
     decrypted_block = decrypted_block_as_int.to_bytes((decrypted_block_as_int.bit_length() + 7) // 8, byteorder="big", signed=False)
 
     if file_hash != decrypted_block[-(len(file_hash)):]:
-        return 1
+        return True
     
-    if create_certificate(certificate_path) != 0:
-        return 1
-    return 0
+    if verify_certificate(certificate_path) != False:
+        return True
+    return False
 
-def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out_path: str) -> bool:
+def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out_path: str | None) -> bool:
     common_name = input("Common name: ")
     country_name = input("Country code (cz, ...): ")
     locality_name = input("Locality name: ")
@@ -109,7 +117,7 @@ def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out
         akr_ca = ca.CertificateAuthority()
     except Exception as e:
         print("Error with creating Certificate Authority:\n" + str(e))
-        return 1
+        return True
 
     csr_builder = x509.CertificateSigningRequestBuilder()
     csr_builder = csr_builder.subject_name(x509.Name([
@@ -133,7 +141,7 @@ def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out
             ))
     except Exception as e:
         print("Error with saving private key:\n" + str(e))
-        return 1        
+        return True        
 
     # save end-entity certificate into PEM file
     try:
@@ -141,7 +149,7 @@ def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out
             cert_f.write(serial_cert)
     except Exception as e:
         print("Error with saving certificate:\n" + str(e))
-        return 1
+        return True
     
     # save certificate and private key into PKCS #12 file
     if pkcs12_out_path is not None:
@@ -158,7 +166,7 @@ def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out
         except Exception as e:
             print("Error with saving PKCS #12 file:\n" + str(e))
     
-    return 0
+    return False
 
 def verify_certificate(certificate_path: str) -> bool:
     # load end-entity certificate from PEM file
@@ -167,7 +175,7 @@ def verify_certificate(certificate_path: str) -> bool:
             ee_certificate = x509.load_pem_x509_certificate(cert_f.read())
     except Exception as e:
         print("Error with loading end-entity certificate:\n" + str(e))
-        return 1
+        return True
     
     # load CA certificate from PEM file
     try:
@@ -175,56 +183,56 @@ def verify_certificate(certificate_path: str) -> bool:
             ca_certificate = x509.load_pem_x509_certificate(cert_f.read())
     except Exception as e:
         print("Error with loading CA certificate:\n" + str(e))
-        return 1
+        return True
 
     # verify that end-entity cert has same issuer as CA cert subject and that signature is correct
     try:
         ee_certificate.verify_directly_issued_by(ca_certificate)
     except ValueError:
         print("Issuer name on the certificate does not match the subject name of the issuer or the signature algorithm is unsupported.")
-        return 1
+        return True
     except TypeError:
         print("Issuer does not have a supported public key type")
-        return 1
+        return True
     except InvalidSignature:
-        return 1
+        return True
 
     # verify that both certificates are valid (date)
     current_time = datetime.utcnow()
     if current_time < ee_certificate.not_valid_before:
         print("End-entity certificate is not valid yet")
-        return 1
+        return True
     elif current_time > ee_certificate.not_valid_after:
         print("End-entity certificate is expired")
-        return 1
+        return True
     if current_time < ca_certificate.not_valid_before:
         print("CA certificate is not valid yet")
-        return 1
+        return True
     elif current_time > ca_certificate.not_valid_after:
         print("CA certificate is expired")
-        return 1
+        return True
     
     # verify that CA certificate is actually marked as CA
     try:
         basic_contrains = ca_certificate.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS).value
         if not basic_contrains.ca:
             print("CA certificate is not marked as CA certificate in basic constrains")
-            return 1
+            return True
     except ExtensionNotFound:
         print("Basic constrain extension was not found in CA certificate. This extension is necessary for determining if CA certificate is actually CA certificate.")
-        return 1
+        return True
     
     # verify that CA certificate has key usage to sign other certificates
     try:
         key_usage = ca_certificate.extensions.get_extension_for_oid(ExtensionOID.KEY_USAGE).value
         if not key_usage.key_cert_sign:
             print("This CA certificate can not be used for signing other certificates")
-            return 1
+            return True
     except ExtensionNotFound:
         print("Key usage extension was not found in CA certificate. This extension is necessary for determining if CA certificate can be used to sign other certificates")
-        return 1
+        return True
 
-    return 0
+    return False
 
 def main(args):
     if args.subcommand == "create_signature":
@@ -242,7 +250,7 @@ def main(args):
         else:
             print("Certificate is invalid")
 
-    return 0
+    return False
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
