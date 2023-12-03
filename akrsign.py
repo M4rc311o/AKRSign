@@ -311,7 +311,7 @@ def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out
 
     private_key = rsa.generate_private_key(
         public_exponent=65537,
-        key_size=2048
+        key_size=4096
     )
 
     try:
