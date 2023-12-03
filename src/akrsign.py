@@ -1,5 +1,3 @@
-from enum import Flag
-from msilib import sequence
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -9,8 +7,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import ExtensionNotFound
 from cryptography.x509.oid import ExtensionOID
 from cryptography.x509.oid import NameOID
+from datetime import datetime, timedelta
 from cryptography import x509
-from datetime import datetime, timedelta, timezone
 import warnings
 import argparse
 import sys
@@ -146,7 +144,7 @@ class CertificateAuthority:
 
         # constrains
         cert_builder = cert_builder.add_extension(
-            x509.BasicConstraints(ca=False, path_length=None), critical=False
+            x509.BasicConstraints(ca=False, path_length=None), critical=True
         )
 
         # specify key usages (certificate can be used for verifying digital signatures)
@@ -304,14 +302,14 @@ def verify_signature(file_path: str, signature_path: str, certificate_path: str)
 
 def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out_path: str | None) -> bool:
     common_name = input("Common name: ")
-    country_name = input("Country code (cz, ...): ")
+    country_name = input("Country name (2 letter code) [cz]: ")
     locality_name = input("Locality name: ")
     state_or_province_name = input("State/province name: ")
     organization_name = input("Organization name: ")
 
     private_key = rsa.generate_private_key(
         public_exponent=65537,
-        key_size=3072
+        key_size=2048
     )
 
     try:
@@ -320,14 +318,20 @@ def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out
         print("Error with creating Certificate Authority:\n" + str(e))
         return True
 
+    name_attributes = []
+    if common_name:
+        name_attributes.append(x509.NameAttribute(NameOID.COMMON_NAME, common_name))
+    if country_name:
+        name_attributes.append(x509.NameAttribute(NameOID.COUNTRY_NAME, country_name.upper()))
+    if locality_name:
+        name_attributes.append(x509.NameAttribute(NameOID.LOCALITY_NAME, locality_name))
+    if state_or_province_name:
+        name_attributes.append(x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, state_or_province_name))
+    if organization_name:
+        name_attributes.append(x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization_name))
+
     csr_builder = x509.CertificateSigningRequestBuilder()
-    csr_builder = csr_builder.subject_name(x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, common_name),
-        x509.NameAttribute(NameOID.COUNTRY_NAME, country_name),
-        x509.NameAttribute(NameOID.LOCALITY_NAME, locality_name),
-        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, state_or_province_name),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization_name)
-    ]))
+    csr_builder = csr_builder.subject_name(x509.Name(name_attributes))
 
     csr = csr_builder.sign(private_key, algorithm=hashes.SHA256())
     serial_cert = akr_ca.handle_csr(csr.public_bytes(encoding=serialization.Encoding.PEM))
