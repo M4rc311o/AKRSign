@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import ExtensionNotFound
 from cryptography.x509.oid import ExtensionOID
 from cryptography.x509.oid import NameOID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cryptography import x509
 import warnings
 import argparse
@@ -71,8 +71,8 @@ class CertificateAuthority:
         cert_builder = x509.CertificateBuilder()    # create certificate builder for self-signed Root CA certificate
         cert_builder = cert_builder.subject_name(self.x509_ca_name) # subject information
         cert_builder = cert_builder.issuer_name(self.x509_ca_name)  # issure information
-        cert_builder = cert_builder.not_valid_before(datetime.today())  # valid from today
-        cert_builder = cert_builder.not_valid_after(datetime.today() + timedelta(days=(365 * 30)))  # valid for 30 years
+        cert_builder = cert_builder.not_valid_before(datetime.now(timezone.utc))  # valid from today
+        cert_builder = cert_builder.not_valid_after(datetime.now(timezone.utc) + timedelta(days=(365 * 30)))  # valid for 30 years
         cert_builder = cert_builder.public_key(self.private_key.public_key())   # subject public key
 
         # misc
@@ -135,8 +135,8 @@ class CertificateAuthority:
         cert_builder = x509.CertificateBuilder()    # create certificate builder for end-entity certificate
         cert_builder = cert_builder.subject_name(csr.subject)   # subject information
         cert_builder = cert_builder.issuer_name(self.x509_ca_name)  # issuer information
-        cert_builder = cert_builder.not_valid_before(datetime.today())  # valid from today
-        cert_builder = cert_builder.not_valid_after(datetime.today() + timedelta(days=(365 * self.year_validity)))  # valid for 5 years
+        cert_builder = cert_builder.not_valid_before(datetime.now(timezone.utc))  # valid from today
+        cert_builder = cert_builder.not_valid_after(datetime.now(timezone.utc) + timedelta(days=(365 * self.year_validity)))  # valid for 5 years
         cert_builder = cert_builder.public_key(csr.public_key())    # subject public key
 
         # misc
@@ -398,7 +398,7 @@ def verify_certificate(certificate_path: str) -> bool:
         print("Error with loading CA certificate:\n" + str(e))
         return True
     
-    # verify that end-entity cert has same issuer as CA cert subject and that signature is correct
+    # verify that CA cert has same issuer as subject and that signature is correct
     try:
         ca_certificate.verify_directly_issued_by(ca_certificate)
     except ValueError:
@@ -425,7 +425,7 @@ def verify_certificate(certificate_path: str) -> bool:
         return True
 
     # verify that both certificates are valid (date)
-    current_time = datetime.today()
+    current_time = datetime.now(timezone.utc)
     if current_time < ee_certificate.not_valid_before:
         print("End-entity certificate is not valid yet")
         return True
@@ -462,6 +462,12 @@ def verify_certificate(certificate_path: str) -> bool:
     return False
 
 def main(args):
+    try:
+        akr_ca = CertificateAuthority()
+    except Exception as e:
+        print("Error with creating Certificate Authority:\n" + str(e))
+        return True
+
     if args.subcommand == "create_signature":
         create_signature(args.file, args.sig_out, args.private_key)
     elif args.subcommand == "verify_signature":
@@ -481,7 +487,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Tool for digital signatures and certificates working with built-in CA",
+        description="Tool designed for creating and verifying digital signatures and certificates working with built-in CA",
         epilog="Created by 247568, 247603, 231271, 247589"
     )
     subparsers = parser.add_subparsers(
@@ -515,7 +521,7 @@ if __name__ == "__main__":
     parser_cc = subparsers.add_parser(
         "create_certificate",
         aliases=["cc"],
-        help="Create and export public key certificate"
+        help="Create and export public key certificate and private key"
     )
     parser_cc.set_defaults(subcommand="create_certificate")
     parser_cc.add_argument("--cert_out", "-c", type=str, required=True, help="Path for saving public key certificate")
