@@ -426,16 +426,16 @@ def verify_certificate(certificate_path: str) -> bool:
 
     # verify that both certificates are valid (date)
     current_time = datetime.now(timezone.utc)
-    if current_time < ee_certificate.not_valid_before:
+    if current_time < ee_certificate.not_valid_before.replace(tzinfo=timezone.utc):
         print("End-entity certificate is not valid yet")
         return True
-    elif current_time > ee_certificate.not_valid_after:
+    elif current_time > ee_certificate.not_valid_after.replace(tzinfo=timezone.utc):
         print("End-entity certificate is expired")
         return True
-    if current_time < ca_certificate.not_valid_before:
+    if current_time < ca_certificate.not_valid_before.replace(tzinfo=timezone.utc):
         print("CA certificate is not valid yet")
         return True
-    elif current_time > ca_certificate.not_valid_after:
+    elif current_time > ca_certificate.not_valid_after.replace(tzinfo=timezone.utc):
         print("CA certificate is expired")
         return True
     
