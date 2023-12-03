@@ -191,7 +191,7 @@ def compute_file_hash(file_path: str) -> bytes:
     return file_hash
 
 def create_AlgorithmIdentifier() -> bytes:
-    sha256WithRSAEncryption_oid_der = b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0b"   # sha256WithRSAEncryption OID 1.2.840.113549.1.1.11
+    sha256WithRSAEncryption_oid_der = b"\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x01"   # sha256 OID 2.16.840.1.101.3.4.2.1
     AlgorithmIdentifier_sequence_length = len(sha256WithRSAEncryption_oid_der) + 2
     # SEQUENCE tag + sequence length + algorithm oid + parameters (should be null according to RFC 8017; \x05 represents NULL tag) + parameters length
     AlgorithmIdentifier_asn1_der = b"\x30" + AlgorithmIdentifier_sequence_length.to_bytes(1, "big", signed=False) + sha256WithRSAEncryption_oid_der + b"\x05" + b"\x00"
@@ -348,7 +348,7 @@ def create_certificate(cert_out_path: str, private_key_out_path: str, pkcs12_out
             ))
     except Exception as e:
         print("Error with saving private key:\n" + str(e))
-        return 1     
+        return 1
 
     # save end-entity certificate into PEM file
     try:
