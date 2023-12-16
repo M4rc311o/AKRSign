@@ -1,4 +1,3 @@
-from pickle import TRUE
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -191,10 +190,10 @@ def compute_file_hash(file_path: str) -> bytes:
     return file_hash
 
 def create_AlgorithmIdentifier() -> bytes:
-    sha256WithRSAEncryption_oid_der = b"\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x01"   # sha256 OID 2.16.840.1.101.3.4.2.1
-    AlgorithmIdentifier_sequence_length = len(sha256WithRSAEncryption_oid_der) + 2
+    sha256_oid_der = b"\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x01"   # sha256 OID 2.16.840.1.101.3.4.2.1
+    AlgorithmIdentifier_sequence_length = len(sha256_oid_der) + 2
     # SEQUENCE tag + sequence length + algorithm oid + parameters (should be null according to RFC 8017; \x05 represents NULL tag) + parameters length
-    AlgorithmIdentifier_asn1_der = b"\x30" + AlgorithmIdentifier_sequence_length.to_bytes(1, "big", signed=False) + sha256WithRSAEncryption_oid_der + b"\x05" + b"\x00"
+    AlgorithmIdentifier_asn1_der = b"\x30" + AlgorithmIdentifier_sequence_length.to_bytes(1, "big", signed=False) + sha256_oid_der + b"\x05" + b"\x00"
     return AlgorithmIdentifier_asn1_der
 
 def create_DigestInfo(AlgorithmIdentifier_asn1_der: bytes, file_hash: bytes) -> bytes:
